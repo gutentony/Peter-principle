@@ -1,0 +1,483 @@
+
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>彼得原理｜互動式 Flashcard</title>
+
+<!--（可選）Google Fonts：Noto Sans TC；若無網路會 fallback 至系統字體 -->
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;800&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    /* —— 顏色變數：可依品牌調整 —— */
+    --brand:        #ec9851;  /* 主色（暖橘） */
+    --brand-ink:    #7a3e10;  /* 主色深墨 */
+    --accent:       #4f46e5;  /* 輔色（靛藍） */
+    --paper:        #fffaf3;  /* 柔紙底 */
+    --ink:          #1f2937;  /* 主要字色 */
+    --muted:        #6b7280;  /* 次要字色 */
+    --card:         #ffffff;  /* 卡片白 */
+    --success:      #10b981;  /* 成功綠 */
+    --warning:      #f59e0b;  /* 警示黃 */
+    --danger:       #ef4444;  /* 危險紅 */
+    --shadow:       0 20px 60px rgba(17,24,39,.16), 0 2px 8px rgba(17,24,39,.08);
+    --radius-xl:    28px;
+    --radius-lg:    18px;
+    --radius-md:    12px;
+    --radius-sm:    10px;
+  }
+
+  /* —— Canvas 舞台（1080 × 1080） —— */
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 1200px at 20% 10%, rgba(236,152,81,.25), transparent 60%),
+      radial-gradient(900px 900px at 80% 90%, rgba(79,70,229,.18), transparent 60%),
+      var(--paper);
+    font-family: "Noto Sans TC", system-ui, -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+    color:var(--ink);
+    display:grid;
+    place-items:center;
+    min-height:100vh;
+    padding:24px;
+  }
+  .stage{
+    width:900px;
+    height:1200px;
+    position:relative;
+    display:grid;
+    place-items:center;
+    isolation:isolate;
+  }
+
+  /* —— 3D 翻面容器 —— */
+  .flip-wrap{
+    position:relative;
+    width:820px;  /* 內縮留白，輸出好看 */
+    height:1120px;
+    perspective:1800px;
+  }
+  input#flip{
+    position:absolute;
+    inset:-9999px;
+  }
+  .card3d{
+    position:relative;
+    width:100%;
+    height:100%;
+    transform-style:preserve-3d;
+    transition:transform .9s cubic-bezier(.2,.8,.2,1);
+  }
+  #flip:checked + .card3d{
+    transform:rotateY(180deg);
+  }
+
+  /* —— 卡面共用樣式 —— */
+  .face{
+    position:absolute;
+    inset:0;
+    background:linear-gradient(145deg, #fff, #fff6ea);
+    border-radius:var(--radius-xl);
+    box-shadow:var(--shadow);
+    padding:40px;
+    display:flex;
+    flex-direction:column;
+    gap:24px;
+    backface-visibility:hidden;
+    outline:1px solid rgba(0,0,0,.04);
+  }
+  .back{
+    transform:rotateY(180deg);
+    background:linear-gradient(160deg, #ffffff, #eef2ff);
+  }
+
+  /* —— 標頭 —— */
+  .header{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:16px;
+  }
+  .title{
+    font-weight:800;
+    font-size:42px;
+    line-height:1.15;
+    letter-spacing:.4px;
+  }
+  .subtitle{
+    margin-top:8px;
+    color:var(--muted);
+    font-size:22px;
+  }
+  .badge{
+    display:inline-flex;
+    align-items:center;
+    gap:10px;
+    background:rgba(236,152,81,.14);
+    color:var(--brand-ink);
+    border:1px solid rgba(236,152,81,.25);
+    padding:10px 14px;
+    border-radius:999px;
+    font-weight:600;
+    font-size:16px;
+  }
+
+  /* —— 功能群組 —— */
+  .group{
+    background:rgba(255,255,255,.76);
+    border:1px solid rgba(17,24,39,.06);
+    border-radius:var(--radius-lg);
+    padding:20px;
+    backdrop-filter:saturate(140%) blur(6px);
+  }
+  .group h3{
+    margin:0 0 16px 0;
+    font-size:24px;
+    letter-spacing:.2px;
+    font-weight:600;
+  }
+  .kpis{
+    display:grid;
+    grid-template-columns:repeat(3, 1fr);
+    gap:16px;
+  }
+  .kpi{
+    background:linear-gradient(180deg, #ffffff 0%, #fff8ef 100%);
+    border:1px solid rgba(236,152,81,.25);
+    border-radius:var(--radius-md);
+    padding:16px 16px 14px;
+    text-align:center;
+  }
+  .kpi strong{ 
+    display:block; 
+    font-size:18px; 
+    color:var(--brand-ink);
+    margin-bottom:4px;
+  }
+  .kpi span{ 
+    color:var(--muted); 
+    font-size:15px; 
+  }
+
+  /* —— details/summary —— */
+  details{
+    background:#fff;
+    border:1px solid rgba(17,24,39,.08);
+    border-radius:var(--radius-md);
+    padding:14px 16px;
+    margin-bottom:12px;
+  }
+  summary{
+    cursor:pointer;
+    list-style:none;
+    font-weight:600;
+    font-size:18px;
+    padding:4px 0;
+    color:var(--accent);
+  }
+  summary::-webkit-details-marker{
+    display:none;
+  }
+  summary::before{
+    content:"▶";
+    margin-right:8px;
+    transition:transform .3s ease;
+  }
+  details[open] summary::before{
+    transform:rotate(90deg);
+  }
+  details p{
+    margin:12px 0 4px 0;
+    line-height:1.6;
+    color:var(--ink);
+  }
+
+  /* —— 翻面按鈕 —— */
+  .flip-btn{
+    position:absolute;
+    bottom:32px;
+    right:32px;
+    background:var(--brand);
+    color:white;
+    border:none;
+    border-radius:50%;
+    width:64px;
+    height:64px;
+    font-size:24px;
+    cursor:pointer;
+    box-shadow:0 8px 32px rgba(236,152,81,.4);
+    transition:all .3s ease;
+    z-index:10;
+  }
+  .flip-btn:hover{
+    background:var(--brand-ink);
+    transform:scale(1.1);
+  }
+
+  /* —— 內容樣式 —— */
+  .content{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    gap:18px;
+  }
+
+  .definition{
+    background:linear-gradient(135deg, rgba(79,70,229,.08), rgba(79,70,229,.02));
+    border:1px solid rgba(79,70,229,.15);
+    border-radius:var(--radius-lg);
+    padding:20px;
+  }
+
+  .definition h3{
+    margin:0 0 12px 0;
+    color:var(--accent);
+    font-size:22px;
+  }
+
+  .definition p{
+    margin:0;
+    font-size:18px;
+    line-height:1.6;
+  }
+
+  .examples{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:16px;
+  }
+
+  .example{
+    background:rgba(16,185,129,.06);
+    border:1px solid rgba(16,185,129,.2);
+    border-radius:var(--radius-md);
+    padding:20px;
+  }
+
+  .example h4{
+    margin:0 0 8px 0;
+    color:var(--success);
+    font-size:16px;
+    font-weight:600;
+  }
+
+  .example p{
+    margin:0;
+    font-size:15px;
+    line-height:1.5;
+  }
+
+  .implications{
+    background:rgba(245,158,11,.08);
+    border:1px solid rgba(245,158,11,.25);
+    border-radius:var(--radius-lg);
+    padding:24px;
+  }
+
+  .implications h3{
+    margin:0 0 16px 0;
+    color:var(--warning);
+    font-size:20px;
+  }
+
+  .implications ul{
+    margin:0;
+    padding-left:20px;
+  }
+
+  .implications li{
+    margin-bottom:8px;
+    line-height:1.5;
+  }
+</style>
+</head>
+
+<body>
+<div class="stage">
+  <div class="flip-wrap">
+    <input type="checkbox" id="flip">
+    
+    <div class="card3d">
+      <!-- 正面 -->
+      <div class="face front">
+        <div class="header">
+          <div>
+            <h1 class="title">彼得原理</h1>
+            <p class="subtitle">Peter Principle</p>
+          </div>
+          <div class="badge">
+            📈 管理學理論
+          </div>
+        </div>
+
+        <div class="content">
+          <div class="definition">
+            <h3>核心概念</h3>
+            <p>在組織階層制度中，每個員工都會晉升到他們無法勝任的職位，並停留在那個位置上。</p>
+          </div>
+
+          <div class="group">
+            <h3>關鍵數據</h3>
+            <div class="kpis">
+              <div class="kpi">
+                <strong>1969年</strong>
+                <span>理論提出年份</span>
+              </div>
+              <div class="kpi">
+                <strong>勞倫斯·彼得</strong>
+                <span>理論創始人</span>
+              </div>
+              <div class="kpi">
+                <strong>階層制度</strong>
+                <span>適用範圍</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="group">
+            <h3>理論要點</h3>
+            <details>
+              <summary>晉升機制</summary>
+              <p>員工因為在當前職位表現良好而獲得晉升，直到達到無法勝任的職位。</p>
+            </details>
+            <details>
+              <summary>能力上限</summary>
+              <p>每個人都有自己的能力上限，超過這個上限就會表現不佳。</p>
+            </details>
+            <details>
+              <summary>組織效率</summary>
+              <p>最終導致組織中充滿了無法勝任當前職位的員工。</p>
+            </details>
+          </div>
+        </div>
+
+        <button class="flip-btn" onclick="document.getElementById('flip').checked = !document.getElementById('flip').checked">
+          🔄
+        </button>
+      </div>
+
+      <!-- 背面 -->
+      <div class="face back">
+        <div class="header">
+          <div>
+            <h1 class="title">實際應用</h1>
+            <p class="subtitle">現實案例與影響</p>
+          </div>
+          <div class="badge">
+            💼 職場現象
+          </div>
+        </div>
+
+        <div class="content">
+          <div class="examples">
+            <div class="example">
+              <h4>技術人員晉升</h4>
+              <p>優秀的程式設計師被提升為管理職，但缺乏管理技能，導致團隊效率下降。</p>
+            </div>
+            <div class="example">
+              <h4>銷售冠軍升職</h4>
+              <p>頂尖業務員被升為銷售經理，但無法有效指導團隊，整體業績反而下滑。</p>
+            </div>
+          </div>
+
+          <div class="implications">
+            <h3>組織影響</h3>
+            <ul>
+              <li>降低整體工作效率</li>
+              <li>影響員工士氣</li>
+              <li>增加管理成本</li>
+              <li>阻礙創新發展</li>
+            </ul>
+          </div>
+
+          <div class="group">
+            <h3>解決策略</h3>
+            <details>
+              <summary>橫向發展</summary>
+              <p>提供專業技術路線，讓員工在擅長領域深度發展，而非只有管理晉升。</p>
+            </details>
+            <details>
+              <summary>能力評估</summary>
+              <p>建立完善的能力評估機制，確保晉升決策基於未來職位所需技能。</p>
+            </details>
+            <details>
+              <summary>培訓支持</summary>
+              <p>為晉升員工提供充分的培訓和支持，幫助他們適應新職位要求。</p>
+            </details>
+            <details>
+              <summary>試用期制</summary>
+              <p>設立晉升試用期，允許不適合的員工回到原職位而不失面子。</p>
+            </details>
+          </div>
+        </div>
+
+        <button class="flip-btn" onclick="document.getElementById('flip').checked = !document.getElementById('flip').checked">
+          🔄
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 添加鍵盤快捷鍵支持
+document.addEventListener('keydown', function(e) {
+  if (e.code === 'Space' || e.code === 'Enter') {
+    e.preventDefault();
+    const flipCheckbox = document.getElementById('flip');
+    flipCheckbox.checked = !flipCheckbox.checked;
+  }
+});
+
+// 添加觸摸手勢支持（移動設備）
+let startX = 0;
+let startY = 0;
+
+document.addEventListener('touchstart', function(e) {
+  startX = e.touches[0].clientX;
+  startY = e.touches[0].clientY;
+});
+
+document.addEventListener('touchend', function(e) {
+  if (!startX || !startY) return;
+  
+  const endX = e.changedTouches[0].clientX;
+  const endY = e.changedTouches[0].clientY;
+  
+  const diffX = startX - endX;
+  const diffY = startY - endY;
+  
+  // 檢查是否為水平滑動且距離足夠
+  if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 50) {
+    const flipCheckbox = document.getElementById('flip');
+    flipCheckbox.checked = !flipCheckbox.checked;
+  }
+  
+  startX = 0;
+  startY = 0;
+});
+
+// 添加平滑的詳細資訊展開動畫
+document.querySelectorAll('details').forEach(details => {
+  details.addEventListener('toggle', function() {
+    if (this.open) {
+      // 展開時的動畫效果
+      this.style.animation = 'fadeIn 0.3s ease-out';
+    }
+  });
+});
+
+// CSS 動畫定義
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+`;
+document.head.appendChild(style);
+</script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9772c304a59eb2fc',t:'MTc1NjU0MDkwMy4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
